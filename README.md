@@ -931,6 +931,86 @@ docker compose down -v         # ⚠ irreversible
 
 ---
 
+### 9.10 Bootstrap e instalación (fase 11)
+
+#### Primera instalación en un Mac mini limpio
+```bash
+# Clonar el repo
+git clone https://github.com/patchamama/HomeLlamaHub-.git /opt/ollama-hub-src
+cd /opt/ollama-hub-src
+
+# Ejecutar bootstrap (idempotente — seguro de re-ejecutar)
+sudo ./scripts/bootstrap.sh --fqdn midominio.dyndns.org --repo /opt/ollama-hub
+```
+
+El script instala Python, Node, Caddy, Ollama, step, age, sops, rclone, crea la cuenta `ollamasvc`, despliega configs, genera secretos, carga `pf` y arranca todos los servicios.
+
+#### Pasos post-bootstrap obligatorios
+```bash
+# 1. Completar .env con credenciales reales
+nano /opt/ollama-hub/.env        # FRITZBOX_USER, FRITZBOX_PASSWORD, PUBLIC_FQDN
+
+# 2. Cifrar .env con sops+age
+age-keygen | tee ~/.config/sops/age/keys.txt | age-keygen -y > /opt/ollama-hub/secrets/backup-age.pub
+AGE_KEY=$(age-keygen -y ~/.config/sops/age/keys.txt)
+sops --encrypt --age "$AGE_KEY" /opt/ollama-hub/.env > /opt/ollama-hub/.env.enc
+rm /opt/ollama-hub/.env          # eliminar el plaintext
+
+# 3. Cambiar la contraseña admin por defecto
+# → Abrir https://<fqdn>/panel/ → Login → cambiar contraseña
+```
+
+---
+
+### 9.11 Backup
+
+#### Configurar backup diario
+```bash
+# Generar clave age para cifrado de backups (si no existe)
+age-keygen -y ~/.config/sops/age/keys.txt > /opt/ollama-hub/secrets/backup-age.pub
+
+# Editar el plist con el destino rclone (opcional)
+nano /opt/ollama-hub/scripts/ai.backup.plist  # set BACKUP_RCLONE_DEST
+
+# Instalar el LaunchDaemon (corre a las 03:00 diariamente)
+sudo cp /opt/ollama-hub/scripts/ai.backup.plist /Library/LaunchDaemons/
+sudo launchctl load /Library/LaunchDaemons/ai.backup.plist
+```
+
+#### Backup manual y verificación
+```bash
+# Ejecutar ahora
+sudo /opt/ollama-hub/scripts/backup.sh
+
+# Verificar que el último backup es restaurable
+sudo /opt/ollama-hub/scripts/backup.sh --verify
+
+# Ver backups existentes
+ls -lh /opt/ollama-hub/backups/
+
+# Ver log del último backup
+tail -30 /var/log/backup.log
+```
+
+---
+
+### 9.12 DynDNS
+
+```bash
+# Verificación manual
+./scripts/check-dyndns.sh midominio.dyndns.org
+
+# Configurar chequeo automático cada 5 minutos (root crontab)
+sudo crontab -e
+# Añadir:
+# */5 * * * * /opt/ollama-hub/scripts/check-dyndns.sh midominio.dyndns.org
+
+# Ver alertas de IP mismatch
+tail -f /var/log/dyndns-alert.log
+```
+
+---
+
 ### 9.9 Tests de seguridad (fase 10)
 
 #### Requisitos

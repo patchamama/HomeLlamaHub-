@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- LaunchDaemon for daily encrypted backup.
+     Place at: /Library/LaunchDaemons/ai.backup.plist
+     Load: sudo launchctl load /Library/LaunchDaemons/ai.backup.plist
+     Runs every day at 03:00. -->
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>ai.backup</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/bash</string>
+        <string>/opt/ollama-hub/scripts/backup.sh</string>
+    </array>
+
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>REPO_DIR</key>
+        <string>/opt/ollama-hub</string>
+
+        <key>BACKUP_LOCAL_DIR</key>
+        <string>/opt/ollama-hub/backups</string>
+
+        <!-- Path to age PUBLIC key for encryption -->
+        <key>BACKUP_AGE_KEY_PATH</key>
+        <string>/opt/ollama-hub/secrets/backup-age.pub</string>
+
+        <!-- rclone destination: e.g.  b2:my-bucket/homellamahub
+             Leave empty to skip remote upload (local only). -->
+        <key>BACKUP_RCLONE_DEST</key>
+        <string></string>
+
+        <key>BACKUP_RETENTION_DAYS</key>
+        <string>30</string>
+    </dict>
+
+    <!-- Run at 03:00 every day -->
+    <key>StartCalendarInterval</key>
+    <dict>
+        <key>Hour</key>
+        <integer>3</integer>
+        <key>Minute</key>
+        <integer>0</integer>
+    </dict>
+
+    <key>RunAtLoad</key>
+    <false/>
+
+    <key>UserName</key>
+    <string>root</string>
+
+    <key>StandardOutPath</key>
+    <string>/var/log/backup.log</string>
+
+    <key>StandardErrorPath</key>
+    <string>/var/log/backup.err</string>
+</dict>
+</plist>
