@@ -1,0 +1,59 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+.venv/
+venv/
+env/
+*.egg-info/
+dist/
+build/
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+htmlcov/
+.coverage
+*.log
+
+# Secrets
+.env
+.env.*
+!.env.example
+*.sops.yaml
+secrets/
+infra/hosts.private.yml
+
+# Node / Frontend
+node_modules/
+frontend/dist/
+frontend/.vite/
+.turbo/
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+.Spotlight-V100
+.Trashes
+.DocumentRevisions-V100
+.fseventsd
+
+# IDEs
+.idea/
+.vscode/
+*.swp
+*.swo
+*.kate-swp
+
+# Data / runtime
+data/
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+
+# Caddy (auto-generated certs, don't commit)
+services/caddy/.caddy/
