@@ -931,7 +931,7 @@ docker compose down -v         # ⚠ irreversible
 
 ---
 
-### 9.10 Bootstrap e instalación (fase 11)
+### 9.8 Bootstrap e instalación (fase 11)
 
 #### Primera instalación en un Mac mini limpio
 ```bash
@@ -962,7 +962,7 @@ rm /opt/ollama-hub/.env          # eliminar el plaintext
 
 ---
 
-### 9.11 Backup
+### 9.9 Backup
 
 #### Configurar backup diario
 ```bash
@@ -994,7 +994,7 @@ tail -30 /var/log/backup.log
 
 ---
 
-### 9.12 DynDNS
+### 9.10 DynDNS
 
 ```bash
 # Verificación manual
@@ -1011,7 +1011,7 @@ tail -f /var/log/dyndns-alert.log
 
 ---
 
-### 9.9 Tests de seguridad (fase 10)
+### 9.11 Tests de seguridad (fase 10)
 
 #### Requisitos
 ```bash
@@ -1060,7 +1060,37 @@ ls -lt tests/security/reports/    # ordenados por fecha
 
 ---
 
-### 9.8 Chequeos de estado global
+### 9.12 Respuesta a incidentes y runbook
+
+Los procedimientos completos están documentados en:
+
+- **`docs/05-incidentes.md`** — qué hacer cuando hay un incidente: detectar, contener (bloquear IP, aislar servicio, cortar acceso), rotar todos los secretos (tokens, WOL token, SECRET_KEY, mTLS), analizar logs, restaurar desde backup, checklist post-incidente.
+
+- **`docs/06-runbook.md`** — operaciones del día a día: wake/sleep de los Macs, actualizar Ollama, añadir/quitar modelos, crear usuarios, registrar nuevos hosts/workers, rotar secretos, backup manual, verificación de DynDNS, calendario de mantenimiento (diario / semanal / mensual / trimestral / anual).
+
+#### Comandos de respuesta rápida ante incidente
+```bash
+# Banear una IP de inmediato
+sudo pfctl -t blocklist -T add <ip>
+
+# Cortar acceso externo (mantiene LAN)
+sudo pfctl -f /dev/stdin <<'EOF'
+block all
+pass quick on lo0 all
+pass out quick all
+EOF
+
+# Revocar TODOS los tokens de API (emergencia)
+sqlite3 /opt/ollama-hub/data/hub.db \
+  "UPDATE apitoken SET is_revoked=1, revoked_at=CURRENT_TIMESTAMP;"
+
+# Restaurar reglas normales
+sudo pfctl -ef /etc/pf.conf
+```
+
+---
+
+### 9.13 Chequeos de estado global
 
 Comandos para una revisión rápida de que todo el stack está saludable:
 
@@ -1110,18 +1140,18 @@ docker compose -f /opt/ollama-hub/observability/docker-compose.yml ps
 ## 9. Estado actual
 
 - [x] Idea y diseño general — este README.
-- [ ] Fase 0 — Inventario.
-- [ ] Fase 1 — DynDNS.
-- [ ] Fase 2 — Ollama nativo.
-- [ ] Fase 3 — Caddy + TLS.
-- [ ] Fase 4 — Backend FastAPI.
-- [ ] Fase 5 — WOL integrado.
-- [ ] Fase 6 — Frontend.
-- [ ] Fase 7 — Worker M1 Max.
-- [ ] Fase 8 — Hardening.
-- [ ] Fase 9 — Observabilidad.
-- [ ] Fase 10 — Tests de seguridad.
-- [ ] Fase 11 — Despliegue y mantenimiento.
+- [ ] Fase 0 — Inventario. *(hardware — hacer manualmente)*
+- [ ] Fase 1 — DynDNS. *(red — hacer manualmente)*
+- [ ] Fase 2 — Ollama nativo. *(instalar en el Mac mini)*
+- [ ] Fase 3 — Caddy + TLS. *(desplegar `services/caddy/Caddyfile`)*
+- [x] Fase 4 — Backend FastAPI. (`backend/` completo con tests)
+- [x] Fase 5 — WOL integrado. (`services/wol/`)
+- [x] Fase 6 — Frontend React SPA. (`frontend/`)
+- [x] Fase 7 — Worker remoto M1 Max. (`services/worker-template/`)
+- [x] Fase 8 — Seguridad endurecida. (`services/firewall/`, `services/security/`, `docs/04-seguridad.md`)
+- [x] Fase 9 — Observabilidad. (`observability/`)
+- [x] Fase 10 — Tests de seguridad. (`tests/security/`)
+- [x] Fase 11 — Despliegue y mantenimiento. (`scripts/`, `docs/05-incidentes.md`, `docs/06-runbook.md`)
 
 ---
 
