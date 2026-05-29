@@ -1,0 +1,41 @@
+# Caddy config for a remote worker node (M1 Max or any LAN host running Ollama).
+# Deploy this on the WORKER, not on the Mac mini hub.
+#
+# Variables to substitute before deploying:
+#   WORKER_LAN_IP   — e.g. 192.168.178.20
+#   CERTS_DIR       — e.g. /opt/ollama-worker/certs
+#
+# The worker listens ONLY on its LAN IP. Never bind to 0.0.0.0 on an exposed interface.
+
+WORKER_LAN_IP:11435 {
+    # Only accept connections from the hub (Mac mini) — add its LAN IP here.
+    # This is an extra layer on top of mTLS; belt-and-suspenders.
+    @not_hub {
+        not remote_ip 192.168.178.0/24
+    }
+    respond @not_hub "Forbidden" 403
+
+    tls /opt/ollama-worker/certs/server.crt /opt/ollama-worker/certs/server.key {
+        client_auth {
+            mode require_and_verify
+            trusted_ca_cert_file /opt/ollama-worker/certs/root_ca.crt
+        }
+        protocols tls1.2 tls1.3
+    }
+
+    reverse_proxy 127.0.0.1:11434 {
+        flush_interval -1
+        transport http {
+            compression off
+            response_header_timeout 15m
+        }
+    }
+
+    log {
+        output file /var/log/ollama-worker/caddy-access.log {
+            roll_size 50mb
+            roll_keep 7
+        }
+        format json
+    }
+}

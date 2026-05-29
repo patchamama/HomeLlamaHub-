@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- LaunchAgent for wol-proxy on the Mac mini hub.
+     Place at: ~/Library/LaunchAgents/ai.wol-proxy.plist
+     Load: launchctl load ~/Library/LaunchAgents/ai.wol-proxy.plist
+     Requires: Python 3 at /usr/bin/python3 (or adjust ProgramArguments below)
+     The token and Fritz!Box credentials are injected via EnvironmentVariables.
+     In production, source them from sops-decrypted .env rather than hardcoding. -->
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>ai.wol-proxy</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/usr/bin/python3</string>
+        <string>/opt/ollama-hub/services/wol/wol-proxy.py</string>
+    </array>
+
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>WOL_PROXY_HOST</key>
+        <string>127.0.0.1</string>
+
+        <key>WOL_PROXY_PORT</key>
+        <string>8765</string>
+
+        <!-- Generate with: python3 -c "import secrets; print(secrets.token_hex(32))" -->
+        <!-- Must match WOL_PROXY_TOKEN in the backend .env -->
+        <key>WOL_PROXY_TOKEN</key>
+        <string>REPLACE_WITH_GENERATED_TOKEN</string>
+
+        <!-- Fritz!Box TR-064 credentials (only needed for /wol/fritzbox) -->
+        <key>FRITZBOX_HOST</key>
+        <string>fritz.box</string>
+
+        <key>FRITZBOX_PORT</key>
+        <string>49000</string>
+
+        <key>FRITZBOX_USER</key>
+        <string>REPLACE_WITH_FRITZBOX_USER</string>
+
+        <key>FRITZBOX_PASSWORD</key>
+        <string>REPLACE_WITH_FRITZBOX_PASSWORD</string>
+    </dict>
+
+    <key>RunAtLoad</key>
+    <true/>
+
+    <key>KeepAlive</key>
+    <true/>
+
+    <key>StandardOutPath</key>
+    <string>/tmp/wol-proxy.log</string>
+
+    <key>StandardErrorPath</key>
+    <string>/tmp/wol-proxy.err</string>
+
+    <!-- Only allow restart up to 3 times in 60 seconds -->
+    <key>ThrottleInterval</key>
+    <integer>20</integer>
+</dict>
+</plist>

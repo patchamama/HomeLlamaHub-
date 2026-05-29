@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- LaunchDaemon (not LaunchAgent) — must run as root to call pfctl.
+     Place at: /Library/LaunchDaemons/ai.auditor.plist
+     Load: sudo launchctl load /Library/LaunchDaemons/ai.auditor.plist -->
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>ai.auditor</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/usr/bin/python3</string>
+        <string>/opt/ollama-hub/services/security/auditor.py</string>
+        <string>--log</string>
+        <string>/var/log/caddy/access.log</string>
+        <string>--whitelist</string>
+        <string>/opt/ollama-hub/services/firewall/whitelist.yml</string>
+    </array>
+
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>AUTH_FAIL_THRESHOLD</key>
+        <string>5</string>
+
+        <key>AUTH_FAIL_WINDOW_S</key>
+        <string>600</string>
+
+        <key>AUTH_RATE_THRESHOLD</key>
+        <string>20</string>
+
+        <key>SCAN_404_THRESHOLD</key>
+        <string>30</string>
+
+        <key>BAN_DURATION_S</key>
+        <string>3600</string>
+    </dict>
+
+    <key>RunAtLoad</key>
+    <true/>
+
+    <key>KeepAlive</key>
+    <true/>
+
+    <key>UserName</key>
+    <string>root</string>
+
+    <key>StandardOutPath</key>
+    <string>/var/log/auditor.log</string>
+
+    <key>StandardErrorPath</key>
+    <string>/var/log/auditor.err</string>
+
+    <key>ThrottleInterval</key>
+    <integer>30</integer>
+</dict>
+</plist>

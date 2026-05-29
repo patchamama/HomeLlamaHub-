@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- LaunchAgent for Ollama on the remote worker node (M1 Max).
+     Place at: ~/Library/LaunchAgents/ai.ollama.worker.plist
+     Load with: launchctl load ~/Library/LaunchAgents/ai.ollama.worker.plist
+     Bind to the LAN IP so Caddy can reach it but external interfaces cannot. -->
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>ai.ollama.worker</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/usr/local/bin/ollama</string>
+        <string>serve</string>
+    </array>
+
+    <key>EnvironmentVariables</key>
+    <dict>
+        <!-- Bind to LAN IP only — replace with the actual IP of this machine -->
+        <key>OLLAMA_HOST</key>
+        <string>127.0.0.1:11434</string>
+
+        <!-- Keep models loaded between requests -->
+        <key>OLLAMA_KEEP_ALIVE</key>
+        <string>30m</string>
+
+        <!-- M1 Max can handle more parallelism than the M1 mini -->
+        <key>OLLAMA_NUM_PARALLEL</key>
+        <string>2</string>
+
+        <key>OLLAMA_MAX_QUEUE</key>
+        <string>32</string>
+
+        <!-- Use Metal GPU acceleration -->
+        <key>OLLAMA_GPU_LAYERS</key>
+        <string>99</string>
+    </dict>
+
+    <key>RunAtLoad</key>
+    <true/>
+
+    <key>KeepAlive</key>
+    <true/>
+
+    <key>StandardOutPath</key>
+    <string>/tmp/ollama-worker.log</string>
+
+    <key>StandardErrorPath</key>
+    <string>/tmp/ollama-worker.err</string>
+</dict>
+</plist>

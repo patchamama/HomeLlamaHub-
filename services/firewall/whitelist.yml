@@ -1,0 +1,8 @@
+# IPs and subnets that auditor.py and pf will NEVER block.
+# Add your home/office/VPN static IPs here before deploying.
+# After editing, run:  sudo ./load-whitelist.sh
+
+ips:
+  - 192.168.178.0/24    # LAN — always trusted
+  # - x.x.x.x           # your mobile static IP
+  # - x.x.x.x           # work/VPN egress IP
