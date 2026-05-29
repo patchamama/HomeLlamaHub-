@@ -1,0 +1,85 @@
+version: "3.9"
+
+# HomeLlamaHub observability stack — Loki + Promtail + Grafana
+#
+# Usage:
+#   docker compose up -d
+#
+# Grafana:  http://127.0.0.1:3000  (admin / change-me)
+# Loki API: http://127.0.0.1:3100
+#
+# All data is persisted in Docker named volumes.
+# Retention: 30 days (configured in loki-config.yml).
+
+networks:
+  observability:
+    driver: bridge
+
+volumes:
+  loki_data:
+  grafana_data:
+
+services:
+  # ── Loki — log aggregation backend ─────────────────────────────────────────
+  loki:
+    image: grafana/loki:2.9.8
+    container_name: loki
+    restart: unless-stopped
+    networks: [observability]
+    ports:
+      - "127.0.0.1:3100:3100"   # never expose to the Internet
+    volumes:
+      - ./loki-config.yml:/etc/loki/loki-config.yml:ro
+      - loki_data:/loki
+    command: -config.file=/etc/loki/loki-config.yml
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:3100/ready || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── Promtail — log collector (runs on the host, reads host log files) ───────
+  promtail:
+    image: grafana/promtail:2.9.8
+    container_name: promtail
+    restart: unless-stopped
+    networks: [observability]
+    volumes:
+      - ./promtail-config.yml:/etc/promtail/promtail-config.yml:ro
+      # Mount host log directories read-only
+      - /var/log/caddy:/var/log/caddy:ro
+      - /var/log:/var/log/host:ro
+      - /tmp:/var/log/tmp:ro        # wol-proxy and auditor write to /tmp
+    command: -config.file=/etc/promtail/promtail-config.yml
+    depends_on:
+      loki:
+        condition: service_healthy
+
+  # ── Grafana — dashboards and alerts ─────────────────────────────────────────
+  grafana:
+    image: grafana/grafana:10.4.3
+    container_name: grafana
+    restart: unless-stopped
+    networks: [observability]
+    ports:
+      - "127.0.0.1:3000:3000"   # access via SSH tunnel or Caddy /grafana/*
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: "${GRAFANA_PASSWORD:-change-me}"
+      GF_SECURITY_ADMIN_USER: admin
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_SERVER_ROOT_URL: "%(protocol)s://%(domain)s/grafana"
+      GF_SERVER_SERVE_FROM_SUB_PATH: "true"
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./provisioning:/etc/grafana/provisioning:ro
+      - ./dashboards:/var/lib/grafana/dashboards:ro
+    depends_on:
+      loki:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:3000/api/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5

@@ -1,0 +1,127 @@
+apiVersion: 1
+
+groups:
+  - orgId: 1
+    name: HomeLlamaHub
+    folder: HomeLlamaHub
+    interval: 1m
+    rules:
+
+      # ── Spike 4xx/5xx ────────────────────────────────────────────────────────
+      - uid: alert-5xx-spike
+        title: "5xx spike"
+        condition: A
+        data:
+          - refId: A
+            datasourceUid: "{{ loki_uid }}"
+            queryType: range
+            model:
+              expr: 'sum(rate({job="caddy"} | json | status >= 500 [5m])) > 0.5'
+              intervalMs: 60000
+              maxDataPoints: 43200
+        noDataState: OK
+        execErrState: Alerting
+        for: 2m
+        annotations:
+          summary: "More than 0.5 req/s returning 5xx for 2 minutes"
+        labels:
+          severity: warning
+
+      - uid: alert-4xx-spike
+        title: "4xx spike"
+        condition: A
+        data:
+          - refId: A
+            datasourceUid: "{{ loki_uid }}"
+            queryType: range
+            model:
+              expr: 'sum(rate({job="caddy"} | json | status >= 400 and status < 500 [5m])) > 2'
+              intervalMs: 60000
+              maxDataPoints: 43200
+        noDataState: OK
+        execErrState: Alerting
+        for: 3m
+        annotations:
+          summary: "More than 2 req/s returning 4xx for 3 minutes"
+        labels:
+          severity: warning
+
+      # ── Ban storm ─────────────────────────────────────────────────────────────
+      - uid: alert-ban-storm
+        title: "IP ban storm"
+        condition: A
+        data:
+          - refId: A
+            datasourceUid: "{{ loki_uid }}"
+            queryType: range
+            model:
+              expr: 'count_over_time({job="auditor"} |= "BANNING" [10m]) > 10'
+              intervalMs: 60000
+              maxDataPoints: 43200
+        noDataState: OK
+        execErrState: Alerting
+        for: 0s
+        annotations:
+          summary: "More than 10 IPs banned in 10 minutes — possible coordinated attack"
+        labels:
+          severity: critical
+
+      # ── Attack pattern detected ───────────────────────────────────────────────
+      - uid: alert-attack-pattern
+        title: "Attack pattern detected"
+        condition: A
+        data:
+          - refId: A
+            datasourceUid: "{{ loki_uid }}"
+            queryType: range
+            model:
+              expr: 'count_over_time({job="auditor"} |= "attack-pattern" [5m]) > 0'
+              intervalMs: 60000
+              maxDataPoints: 43200
+        noDataState: OK
+        execErrState: Alerting
+        for: 0s
+        annotations:
+          summary: "Attack pattern (SQLi/XSS/traversal) detected in request URI"
+        labels:
+          severity: critical
+
+      # ── Ollama unresponsive ───────────────────────────────────────────────────
+      - uid: alert-ollama-down
+        title: "Ollama not responding"
+        condition: A
+        data:
+          - refId: A
+            datasourceUid: "{{ loki_uid }}"
+            queryType: range
+            model:
+              expr: 'count_over_time({job="fastapi"} |= "ollama" |= "ConnectError" [5m]) > 3'
+              intervalMs: 60000
+              maxDataPoints: 43200
+        noDataState: OK
+        execErrState: Alerting
+        for: 1m
+        annotations:
+          summary: "FastAPI cannot reach Ollama — check that Ollama is running on port 11434"
+        labels:
+          severity: critical
+
+      # ── Auth brute-force ─────────────────────────────────────────────────────
+      - uid: alert-brute-force
+        title: "Auth brute-force"
+        condition: A
+        data:
+          - refId: A
+            datasourceUid: "{{ loki_uid }}"
+            queryType: range
+            model:
+              expr: 'sum(rate({job="caddy"} | json | uri =~ "/api/auth.*" | status >= 400 [1m])) > 1'
+              intervalMs: 60000
+              maxDataPoints: 43200
+        noDataState: OK
+        execErrState: Alerting
+        for: 2m
+        annotations:
+          summary: "Sustained auth failure rate above 1/s for 2 minutes"
+        labels:
+          severity: warning

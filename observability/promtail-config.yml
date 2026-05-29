@@ -1,0 +1,89 @@
+server:
+  http_listen_port: 9080
+  grpc_listen_port: 0
+  log_level: warn
+
+positions:
+  filename: /tmp/promtail-positions.yaml
+
+clients:
+  - url: http://loki:3100/loki/api/v1/push
+
+scrape_configs:
+  # ── Caddy access log (JSON) ─────────────────────────────────────────────────
+  - job_name: caddy_access
+    static_configs:
+      - targets: [localhost]
+        labels:
+          job: caddy
+          host: mac-mini
+          __path__: /var/log/caddy/access.log
+    pipeline_stages:
+      - json:
+          expressions:
+            status:     status
+            method:     request.method
+            uri:        request.uri
+            remote_ip:  request.remote_ip
+            duration:   duration
+      - labels:
+          status:
+          method:
+      - metrics:
+          http_requests_total:
+            type: Counter
+            description: Total HTTP requests processed by Caddy
+            source: status
+            config:
+              action: inc
+
+  # ── Caddy error log ──────────────────────────────────────────────────────────
+  - job_name: caddy_errors
+    static_configs:
+      - targets: [localhost]
+        labels:
+          job: caddy_errors
+          host: mac-mini
+          __path__: /var/log/caddy/error.log
+
+  # ── FastAPI / backend (structured JSON via Python logging) ──────────────────
+  - job_name: fastapi
+    static_configs:
+      - targets: [localhost]
+        labels:
+          job: fastapi
+          host: mac-mini
+          __path__: /var/log/host/fastapi.log
+    pipeline_stages:
+      - json:
+          expressions:
+            level:   levelname
+            logger:  name
+            message: message
+      - labels:
+          level:
+          logger:
+
+  # ── auditor.py ──────────────────────────────────────────────────────────────
+  - job_name: auditor
+    static_configs:
+      - targets: [localhost]
+        labels:
+          job: auditor
+          host: mac-mini
+          __path__: /var/log/host/auditor.log
+    pipeline_stages:
+      # Extract BANNING lines: "BANNING 1.2.3.4 reason=auth-fail:5in600s"
+      - regex:
+          expression: 'BANNING (?P<banned_ip>\S+) reason=(?P<ban_reason>\S+)'
+      - labels:
+          ban_reason:
+
+  # ── wol-proxy.py ────────────────────────────────────────────────────────────
+  - job_name: wol_proxy
+    static_configs:
+      - targets: [localhost]
+        labels:
+          job: wol_proxy
+          host: mac-mini
+          __path__: /var/log/tmp/wol-proxy.log

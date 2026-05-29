@@ -1,0 +1,126 @@
+{
+  "title": "HomeLlamaHub — Security",
+  "uid": "homellamahub-security",
+  "schemaVersion": 38,
+  "version": 1,
+  "refresh": "1m",
+  "time": { "from": "now-24h", "to": "now" },
+  "tags": ["homellamahub", "security"],
+  "panels": [
+    {
+      "id": 1,
+      "title": "Bans in last 24h",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 0 },
+      "targets": [
+        {
+          "datasource": "Loki",
+          "expr": "count_over_time({job=\"auditor\"} |= \"BANNING\" [24h])",
+          "legendFormat": "bans"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "orange", "value": 5 },
+              { "color": "red", "value": 20 }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 2,
+      "title": "Auth Failures — last 24h",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 6, "x": 6, "y": 0 },
+      "targets": [
+        {
+          "datasource": "Loki",
+          "expr": "count_over_time({job=\"caddy\"} | json | uri =~ \"/api/auth.*\" | status >= 400 [24h])",
+          "legendFormat": "auth failures"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "title": "Attack Pattern Detections",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 0 },
+      "targets": [
+        {
+          "datasource": "Loki",
+          "expr": "count_over_time({job=\"auditor\"} |= \"attack-pattern\" [24h])",
+          "legendFormat": "attack patterns"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "red", "value": 1 }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 4,
+      "title": "WOL Events",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 6, "x": 18, "y": 0 },
+      "targets": [
+        {
+          "datasource": "Loki",
+          "expr": "count_over_time({job=\"wol_proxy\"} |= \"magic packet sent\" [24h])",
+          "legendFormat": "WOL sent"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "title": "Ban Events Timeline",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 4 },
+      "targets": [
+        {
+          "datasource": "Loki",
+          "expr": "sum(rate({job=\"auditor\"} |= \"BANNING\" [5m]))",
+          "legendFormat": "bans/5min"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "title": "Recent Ban Log",
+      "type": "logs",
+      "gridPos": { "h": 10, "w": 24, "x": 0, "y": 12 },
+      "targets": [
+        {
+          "datasource": "Loki",
+          "expr": "{job=\"auditor\"} |= \"BANNING\"",
+          "legendFormat": ""
+        }
+      ],
+      "options": { "showTime": true, "wrapLogMessage": false }
+    },
+    {
+      "id": 7,
+      "title": "Auth Failure Rate by IP",
+      "type": "table",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 22 },
+      "targets": [
+        {
+          "datasource": "Loki",
+          "expr": "topk(20, sum by (remote_ip) (count_over_time({job=\"caddy\"} | json | uri =~ \"/api/auth.*\" | status >= 400 [1h])))",
+          "legendFormat": "{{remote_ip}}"
+        }
+      ]
+    }
+  ]
+}

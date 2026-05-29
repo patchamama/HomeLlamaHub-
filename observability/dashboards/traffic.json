@@ -1,0 +1,118 @@
+{
+  "title": "HomeLlamaHub — Traffic & Errors",
+  "uid": "homellamahub-traffic",
+  "schemaVersion": 38,
+  "version": 1,
+  "refresh": "30s",
+  "time": { "from": "now-3h", "to": "now" },
+  "tags": ["homellamahub"],
+  "panels": [
+    {
+      "id": 1,
+      "title": "Requests / min",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "targets": [
+        {
+          "datasource": "Loki",
+          "expr": "sum(rate({job=\"caddy\"}[1m]))",
+          "legendFormat": "req/min"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "4xx Errors / min",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "targets": [
+        {
+          "datasource": "Loki",
+          "expr": "sum(rate({job=\"caddy\"} | json | status >= 400 and status < 500 [1m]))",
+          "legendFormat": "4xx/min"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "fixed", "fixedColor": "orange" }
+        }
+      }
+    },
+    {
+      "id": 3,
+      "title": "5xx Errors / min",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "targets": [
+        {
+          "datasource": "Loki",
+          "expr": "sum(rate({job=\"caddy\"} | json | status >= 500 [1m]))",
+          "legendFormat": "5xx/min"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "fixed", "fixedColor": "red" }
+        }
+      }
+    },
+    {
+      "id": 4,
+      "title": "Auth Failures / min",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "targets": [
+        {
+          "datasource": "Loki",
+          "expr": "sum(rate({job=\"caddy\"} | json | uri =~ \"/api/auth.*\" | status >= 400 [1m]))",
+          "legendFormat": "auth failures/min"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "fixed", "fixedColor": "dark-red" }
+        }
+      }
+    },
+    {
+      "id": 5,
+      "title": "Banned IPs (last 1h)",
+      "type": "logs",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 16 },
+      "targets": [
+        {
+          "datasource": "Loki",
+          "expr": "{job=\"auditor\"} |= \"BANNING\"",
+          "legendFormat": ""
+        }
+      ],
+      "options": { "showTime": true, "wrapLogMessage": true }
+    },
+    {
+      "id": 6,
+      "title": "Top Request Paths",
+      "type": "table",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 24 },
+      "targets": [
+        {
+          "datasource": "Loki",
+          "expr": "topk(10, sum by (uri) (rate({job=\"caddy\"} | json | __error__=\"\" [1h])))",
+          "legendFormat": "{{uri}}"
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "title": "HTTP Status Distribution",
+      "type": "piechart",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 24 },
+      "targets": [
+        {
+          "datasource": "Loki",
+          "expr": "sum by (status) (rate({job=\"caddy\"} | json | __error__=\"\" [1h]))",
+          "legendFormat": "{{status}}"
+        }
+      ]
+    }
+  ]
+}
