@@ -931,6 +931,55 @@ docker compose down -v         # ⚠ irreversible
 
 ---
 
+### 9.9 Tests de seguridad (fase 10)
+
+#### Requisitos
+```bash
+brew install nmap testssl      # escaneo de puertos y TLS
+# ZAP usa Docker — no requiere instalación local
+```
+
+#### Suite completa (orden recomendado antes de cada release)
+```bash
+cd tests/security
+./run-all.sh midominio.dyndns.org admin@localhost <password> olh_<token>
+# Los reportes datados se guardan en tests/security/reports/
+```
+
+#### Tests individuales
+```bash
+# 1. Escaneo de puertos — solo 443 debe responder
+./nmap.sh midominio.dyndns.org
+./nmap.sh midominio.dyndns.org --full    # scan completo, ~10 min
+
+# 2. Calidad TLS — debe pasar todas las comprobaciones (POODLE, BEAST, OCSP...)
+./testssl.sh midominio.dyndns.org
+
+# 3. OWASP ZAP baseline contra el panel
+./zap-baseline.sh midominio.dyndns.org
+./zap-baseline.sh midominio.dyndns.org olh_<token>   # con auth
+
+# 4. API pentest — tokens, scopes, IDOR, SQLi
+./api-pentest.sh https://midominio.dyndns.org admin@localhost <password>
+
+# 5. Prompt injection — 9 payloads, verifica que no filtra secretos
+./prompt-injection.sh https://midominio.dyndns.org olh_<token>
+./prompt-injection.sh https://midominio.dyndns.org olh_<token> llama3.1:8b
+
+# 6. Verificación de audit log — confirma que los eventos quedan registrados
+./audit-verify.sh https://midominio.dyndns.org admin@localhost <password>
+./audit-verify.sh https://localhost:8000 admin@localhost <password> /opt/ollama-hub/data/hub.db
+```
+
+#### Leer los reportes
+```bash
+ls -lt tests/security/reports/    # ordenados por fecha
+# Cada script genera: nmap-YYYYMMDD.txt, testssl-*.txt/json,
+# zap-*.html/json, api-pentest-*.txt, prompt-injection-*.txt, audit-verify-*.txt
+```
+
+---
+
 ### 9.8 Chequeos de estado global
 
 Comandos para una revisión rápida de que todo el stack está saludable:
