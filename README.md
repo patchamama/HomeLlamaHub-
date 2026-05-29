@@ -593,6 +593,374 @@ Todo este fichero debe vivir cifrado con `sops`; nunca en claro en el repo.
 
 ---
 
+## 9. Guía de operación
+
+Comandos concretos para levantar, verificar y diagnosticar cada componente. Ejecutar **en orden** en un Mac mini limpio; en un sistema ya configurado usarlos como referencia de diagnóstico.
+
+> Ruta base asumida: `/opt/ollama-hub/` — ajustar si se usa otra.
+
+---
+
+### 9.1 Backend FastAPI
+
+#### Requisitos
+```bash
+brew install python@3.12
+pip install uv
+cd backend && uv sync
+```
+
+#### Configuración
+```bash
+cp .env.example .env          # completar con valores reales
+# Variables mínimas obligatorias:
+#   SECRET_KEY, DATABASE_URL, PUBLIC_FQDN, WOL_PROXY_TOKEN
+```
+
+#### Arrancar (desarrollo)
+```bash
+cd backend
+uv run uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload
+```
+
+#### Arrancar (producción — LaunchAgent)
+```bash
+# El plist debe apuntar a uvicorn con --workers 2 y sin --reload
+launchctl load ~/Library/LaunchAgents/ai.homellamahub.plist
+launchctl list | grep homellamahub   # debe aparecer con PID
+```
+
+#### Verificar
+```bash
+curl http://127.0.0.1:8000/health
+# {"status":"ok","queue_active":0,"queue_waiting":0}
+
+# Login y obtener JWT:
+curl -s -X POST http://127.0.0.1:8000/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email":"admin@localhost","password":"<tu-password"}' | python3 -m json.tool
+```
+
+#### Tests unitarios
+```bash
+cd backend
+uv run pytest -v                      # todos los tests
+uv run pytest tests/test_auth.py -v   # solo auth
+uv run pytest tests/test_queue.py -v  # solo cola
+```
+
+---
+
+### 9.2 Frontend React
+
+#### Requisitos
+```bash
+brew install node           # Node 20+
+cd frontend && npm install
+```
+
+#### Desarrollo
+```bash
+cd frontend
+npm run dev                 # Vite dev server en http://localhost:5173
+```
+
+#### Build de producción
+```bash
+cd frontend
+npm run build               # genera frontend/dist/
+# Caddy sirve frontend/dist/ en /panel/*
+```
+
+#### Verificar build
+```bash
+ls -lh frontend/dist/       # debe existir index.html + assets/
+# Verificar que el hash de los assets cambió respecto al build anterior
+```
+
+---
+
+### 9.3 WOL Proxy
+
+#### Instalación
+```bash
+# Copiar el servicio
+cp -r services/wol/ /opt/ollama-hub/services/wol/
+
+# Generar token (guardar en .env y en el plist)
+python3 -c "import secrets; print(secrets.token_hex(32))"
+
+# Editar el plist con el token y credenciales FRITZ!Box
+nano services/wol/ai.wol-proxy.plist   # reemplazar los REPLACE_WITH_* 
+
+# Instalar LaunchAgent
+cp services/wol/ai.wol-proxy.plist ~/Library/LaunchAgents/
+launchctl load ~/Library/LaunchAgents/ai.wol-proxy.plist
+```
+
+#### Verificar
+```bash
+# Health check
+curl http://127.0.0.1:8765/health
+# {"ok": true}
+
+# Smoke test completo (requiere MAC y token)
+./services/wol/test-magic-packet.sh AA:BB:CC:DD:EE:FF <token>
+```
+
+#### Diagnóstico
+```bash
+launchctl list | grep wol-proxy        # verificar que corre
+tail -f /tmp/wol-proxy.log             # logs en tiempo real
+tail -f /tmp/wol-proxy.err             # errores
+
+# Verificar que solo escucha en localhost:
+lsof -nP -iTCP:8765 | grep LISTEN
+# Debe mostrar 127.0.0.1:8765, nunca 0.0.0.0 o *
+```
+
+---
+
+### 9.4 Firewall (pf)
+
+#### Instalación
+```bash
+# Preparar archivos de tablas vacíos
+sudo touch /etc/pf.blocklist /etc/pf.whitelist
+sudo chmod 600 /etc/pf.blocklist /etc/pf.whitelist
+
+# Copiar configuración
+sudo cp services/firewall/pf.conf /etc/pf.conf
+
+# Cargar tu whitelist (editar services/firewall/whitelist.yml primero)
+sudo ./services/firewall/load-whitelist.sh
+
+# Activar pf
+sudo pfctl -ef /etc/pf.conf
+```
+
+#### Verificar
+```bash
+sudo pfctl -s info                      # Status: Enabled
+sudo pfctl -s rules                     # listar reglas activas
+sudo pfctl -t blocklist -T show         # IPs baneadas
+sudo pfctl -t whitelist -T show         # IPs en whitelist
+
+# Test desde red externa (solo 443 debe responder):
+nmap -Pn -p 22,443,8000,8765,11434 <tu-fqdn>
+```
+
+#### Operaciones comunes
+```bash
+# Añadir IP a whitelist manualmente (temporal, sin editar el yml):
+sudo pfctl -t whitelist -T add 1.2.3.4
+
+# Banear IP manualmente:
+sudo pfctl -t blocklist -T add 1.2.3.4
+
+# Desbanear IP:
+sudo pfctl -t blocklist -T delete 1.2.3.4
+
+# Recargar reglas sin perder el estado:
+sudo pfctl -f /etc/pf.conf
+
+# Ver estadísticas de tráfico:
+sudo pfctl -s info | grep -A5 "State Table"
+```
+
+---
+
+### 9.5 Auditor de seguridad
+
+#### Instalación
+```bash
+# El auditor corre como root (necesita pfctl)
+sudo cp services/security/ai.auditor.plist /Library/LaunchDaemons/
+sudo launchctl load /Library/LaunchDaemons/ai.auditor.plist
+```
+
+#### Verificar
+```bash
+sudo launchctl list | grep auditor      # debe aparecer con PID
+tail -f /var/log/auditor.log            # actividad en tiempo real
+
+# Simular 5 fallos de auth para probar el ban:
+for i in $(seq 1 6); do
+  curl -s -X POST http://127.0.0.1:8000/api/auth/login \
+    -H "Content-Type: application/json" \
+    -d '{"email":"x@x.com","password":"wrong"}' > /dev/null
+done
+# Verificar que la IP quedó baneada:
+sudo pfctl -t blocklist -T show
+```
+
+#### Diagnóstico
+```bash
+tail -f /var/log/auditor.err            # errores del proceso
+sudo launchctl start ai.auditor         # forzar restart
+grep "BANNING" /var/log/auditor.log     # historial de bans
+grep "attack-pattern" /var/log/auditor.log  # ataques detectados
+```
+
+#### Variables de configuración (env en el plist)
+| Variable | Default | Descripción |
+|---|---|---|
+| `AUTH_FAIL_THRESHOLD` | 5 | Fallos de auth antes de banear |
+| `AUTH_FAIL_WINDOW_S` | 600 | Ventana de tiempo en segundos |
+| `AUTH_RATE_THRESHOLD` | 20 | Req/min a `/api/auth/*` antes de banear |
+| `SCAN_404_THRESHOLD` | 30 | 404s/min antes de banear (scanner) |
+| `BAN_DURATION_S` | 3600 | Duración del ban en segundos |
+
+---
+
+### 9.6 Worker remoto (M1 Max)
+
+#### Setup completo (ejecutar en el hub)
+```bash
+# Paso 1 — generar certificados mTLS (en el Mac mini hub)
+chmod +x services/worker-template/setup-mtls.sh
+./services/worker-template/setup-mtls.sh 192.168.178.20   # IP del M1 Max
+
+# Paso 2 — copiar archivos al worker
+scp -r services/worker-template/ usuario@192.168.178.20:~/worker-template/
+
+# Paso 3 — ejecutar setup en el worker (SSH al M1 Max)
+ssh usuario@192.168.178.20
+chmod +x ~/worker-template/setup-worker.sh
+~/worker-template/setup-worker.sh --ip 192.168.178.20 --hub-ip 192.168.178.10
+```
+
+#### Registrar el worker en la API
+```bash
+# Obtener JWT admin primero
+ADMIN_JWT=$(curl -s -X POST http://127.0.0.1:8000/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email":"admin@localhost","password":"<password>"}' \
+  | python3 -c "import sys,json; print(json.load(sys.stdin)['access_token'])")
+
+# Registrar el host
+curl -X POST http://127.0.0.1:8000/api/admin/hosts \
+  -H "Authorization: Bearer $ADMIN_JWT" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "m1-max",
+    "base_url": "https://192.168.178.20:11435",
+    "ip": "192.168.178.20",
+    "mac": "AA:BB:CC:DD:EE:FF",
+    "is_local": false,
+    "requires_wol": true,
+    "is_enabled": true
+  }'
+```
+
+#### Verificar conectividad mTLS
+```bash
+CERTS=/opt/ollama-hub/secrets/mtls
+curl --cacert $CERTS/ca/root_ca.crt \
+     --cert $CERTS/hub-client/client.crt \
+     --key $CERTS/hub-client/client.key \
+     https://192.168.178.20:11435/api/tags
+# Debe devolver la lista de modelos del worker
+
+# Test WOL manual:
+ADMIN_JWT=<token>
+curl -X POST http://127.0.0.1:8000/api/admin/hosts/<id>/wake \
+  -H "Authorization: Bearer $ADMIN_JWT"
+```
+
+---
+
+### 9.7 Observabilidad (Loki + Promtail + Grafana)
+
+#### Requisitos
+```bash
+brew install docker           # Docker Desktop o OrbStack
+```
+
+#### Arrancar
+```bash
+cd observability
+cp .env.example .env          # cambiar GRAFANA_PASSWORD
+docker compose up -d
+docker compose ps             # verificar que los 3 servicios están healthy
+```
+
+#### Acceder a Grafana
+```bash
+# Opción A — túnel SSH (desarrollo):
+ssh -L 3000:127.0.0.1:3000 usuario@mac-mini
+# Abrir http://localhost:3000  (admin / <GRAFANA_PASSWORD>)
+
+# Opción B — vía Caddy (producción, añadir al Caddyfile):
+# handle_path /grafana/* {
+#     reverse_proxy 127.0.0.1:3000
+# }
+```
+
+#### Verificar ingesta de logs
+```bash
+# Caddy debe estar escribiendo logs JSON:
+ls -lh /var/log/caddy/access.log
+
+# Verificar que Promtail está enviando:
+curl http://127.0.0.1:9080/metrics | grep promtail_sent_entries
+
+# Query directa a Loki (últimas 10 líneas de Caddy):
+curl -G http://127.0.0.1:3100/loki/api/v1/query \
+  --data-urlencode 'query={job="caddy"}' \
+  --data-urlencode 'limit=10' | python3 -m json.tool
+```
+
+#### Operaciones comunes
+```bash
+# Ver logs en tiempo real (sin Grafana):
+docker compose logs -f promtail
+
+# Reiniciar un servicio:
+docker compose restart grafana
+
+# Ver espacio usado por Loki:
+docker volume inspect observability_loki_data
+
+# Detener todo (datos persisten en volúmenes):
+docker compose down
+
+# Borrar todo incluyendo datos:
+docker compose down -v         # ⚠ irreversible
+```
+
+---
+
+### 9.8 Chequeos de estado global
+
+Comandos para una revisión rápida de que todo el stack está saludable:
+
+```bash
+#!/usr/bin/env bash
+# Ejecutar periódicamente o ante cualquier duda
+echo "=== Backend ==="
+curl -sf http://127.0.0.1:8000/health | python3 -m json.tool
+
+echo "=== WOL Proxy ==="
+curl -sf http://127.0.0.1:8765/health | python3 -m json.tool
+
+echo "=== Ollama ==="
+curl -sf http://127.0.0.1:11434/api/version | python3 -m json.tool
+
+echo "=== pf ==="
+sudo pfctl -s info | grep Status
+sudo pfctl -t blocklist -T show | wc -l | xargs echo "IPs baneadas:"
+
+echo "=== Servicios LaunchAgent/Daemon ==="
+launchctl list | grep -E "wol-proxy|homellamahub"
+sudo launchctl list | grep -E "auditor"
+
+echo "=== Observabilidad ==="
+docker compose -f /opt/ollama-hub/observability/docker-compose.yml ps
+```
+
+---
+
 ## 8. Referencias técnicas
 
 - [Ollama detrás de un reverse proxy con Caddy o Nginx](https://www.glukhov.org/llm-hosting/ollama/ollama-behind-reverse-proxy/)
